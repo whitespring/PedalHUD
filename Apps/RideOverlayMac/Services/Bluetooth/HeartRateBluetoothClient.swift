@@ -1,0 +1,221 @@
+import CoreBluetooth
+import Foundation
+
+@MainActor
+final class HeartRateBluetoothClient: NSObject {
+    var onHeartRate: ((Int) -> Void)?
+    var onStateChange: ((String) -> Void)?
+
+    private lazy var centralManager = CBCentralManager(delegate: self, queue: nil)
+    private var connectedPeripheral: CBPeripheral?
+    private var pendingPeripheral: CBPeripheral?
+    private var shouldScanWhenPoweredOn = false
+
+    private let heartRateServiceUUID = CBUUID(string: "180D")
+    private let heartRateMeasurementCharacteristicUUID = CBUUID(string: "2A37")
+
+    func start() {
+        shouldScanWhenPoweredOn = true
+        _ = centralManager
+
+        guard centralManager.state == .poweredOn else {
+            updateState(centralStateDescription(centralManager.state))
+            return
+        }
+
+        startScan()
+    }
+
+    func stop() {
+        shouldScanWhenPoweredOn = false
+        centralManager.stopScan()
+
+        if let connectedPeripheral {
+            centralManager.cancelPeripheralConnection(connectedPeripheral)
+        } else if let pendingPeripheral {
+            centralManager.cancelPeripheralConnection(pendingPeripheral)
+        } else {
+            updateState("Heart rate scan stopped")
+        }
+    }
+
+    private func startScan() {
+        guard connectedPeripheral == nil, pendingPeripheral == nil else {
+            return
+        }
+
+        updateState("Scanning for BLE heart rate monitors")
+        centralManager.scanForPeripherals(
+            withServices: [heartRateServiceUUID],
+            options: [
+                CBCentralManagerScanOptionAllowDuplicatesKey: false,
+            ]
+        )
+    }
+
+    private func connect(to peripheral: CBPeripheral, name: String) {
+        pendingPeripheral = peripheral
+        peripheral.delegate = self
+        centralManager.stopScan()
+        updateState("Connecting to \(name)")
+        centralManager.connect(peripheral)
+    }
+
+    private func isPreferredMonitorName(_ name: String) -> Bool {
+        let uppercasedName = name.uppercased()
+        return uppercasedName.contains("HRM")
+            || uppercasedName.contains("HEART")
+            || uppercasedName.contains("BELT")
+            || uppercasedName.contains("DECATHLON")
+    }
+
+    private func parseHeartRateMeasurement(_ data: Data) -> Int? {
+        guard data.count >= 2 else {
+            return nil
+        }
+
+        let flags = data[0]
+
+        if flags & 0x01 != 0 {
+            guard data.count >= 3 else {
+                return nil
+            }
+
+            return Int(UInt16(data[1]) | (UInt16(data[2]) << 8))
+        }
+
+        return Int(data[1])
+    }
+
+    private func updateState(_ state: String) {
+        onStateChange?(state)
+    }
+
+    private func centralStateDescription(_ state: CBManagerState) -> String {
+        switch state {
+        case .unknown:
+            "Bluetooth state is unknown"
+        case .resetting:
+            "Bluetooth is resetting"
+        case .unsupported:
+            "Bluetooth is unsupported on this Mac"
+        case .unauthorized:
+            "Bluetooth access is denied"
+        case .poweredOff:
+            "Turn on Bluetooth to scan for the heart rate monitor"
+        case .poweredOn:
+            "Bluetooth is ready"
+        @unknown default:
+            "Bluetooth is unavailable"
+        }
+    }
+}
+
+extension HeartRateBluetoothClient: CBCentralManagerDelegate {
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        updateState(centralStateDescription(central.state))
+
+        if central.state == .poweredOn, shouldScanWhenPoweredOn {
+            startScan()
+        }
+    }
+
+    func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        guard connectedPeripheral == nil, pendingPeripheral == nil else {
+            return
+        }
+
+        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let peripheralName = peripheral.name ?? advertisedName ?? "heart rate monitor"
+
+        if isPreferredMonitorName(peripheralName) || pendingPeripheral == nil {
+            connect(to: peripheral, name: peripheralName)
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        pendingPeripheral = nil
+        connectedPeripheral = peripheral
+        updateState("Connected to \(peripheral.name ?? "heart rate monitor"), discovering services")
+        peripheral.discoverServices([heartRateServiceUUID])
+    }
+
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        connectedPeripheral = nil
+        pendingPeripheral = nil
+
+        if let error {
+            updateState("Heart rate monitor disconnected: \(error.localizedDescription)")
+        } else {
+            updateState("Heart rate monitor disconnected")
+        }
+
+        if shouldScanWhenPoweredOn, central.state == .poweredOn {
+            startScan()
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        pendingPeripheral = nil
+        updateState(error?.localizedDescription ?? "Failed to connect to the heart rate monitor")
+
+        if shouldScanWhenPoweredOn, central.state == .poweredOn {
+            startScan()
+        }
+    }
+}
+
+extension HeartRateBluetoothClient: CBPeripheralDelegate {
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        if let error {
+            updateState("Heart rate service discovery failed: \(error.localizedDescription)")
+            return
+        }
+
+        peripheral.services?.forEach { service in
+            guard service.uuid == heartRateServiceUUID else {
+                return
+            }
+
+            peripheral.discoverCharacteristics([heartRateMeasurementCharacteristicUUID], for: service)
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        if let error {
+            updateState("Heart rate characteristic discovery failed: \(error.localizedDescription)")
+            return
+        }
+
+        service.characteristics?.forEach { characteristic in
+            guard characteristic.uuid == heartRateMeasurementCharacteristicUUID else {
+                return
+            }
+
+            peripheral.setNotifyValue(true, for: characteristic)
+        }
+
+        updateState("Subscribed to heart rate updates")
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        if let error {
+            updateState("Heart rate update failed: \(error.localizedDescription)")
+            return
+        }
+
+        guard characteristic.uuid == heartRateMeasurementCharacteristicUUID,
+              let data = characteristic.value,
+              let heartRate = parseHeartRateMeasurement(data) else {
+            return
+        }
+
+        onHeartRate?(heartRate)
+        updateState("Receiving heart rate from \(connectedPeripheral?.name ?? "monitor")")
+    }
+}

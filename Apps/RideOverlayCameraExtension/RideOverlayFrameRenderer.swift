@@ -1,0 +1,169 @@
+import CoreImage
+import CoreVideo
+import Foundation
+import RideOverlayCore
+import SwiftUI
+
+final class RideOverlayFrameRenderer: @unchecked Sendable {
+    private let builder = OverlayHUDModelBuilder()
+    private let ciContext = CIContext()
+
+    func makeFrame(
+        width: Int32,
+        height: Int32,
+        metrics: LiveMetrics,
+        configuration: OverlayConfiguration = .defaultConfiguration,
+        inputPixelBuffer: CVPixelBuffer? = nil
+    ) -> CVPixelBuffer? {
+        let attributes: [CFString: Any] = [
+            kCVPixelBufferWidthKey: width,
+            kCVPixelBufferHeightKey: height,
+            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferIOSurfacePropertiesKey: [:] as [String: Any],
+        ]
+
+        var pixelBuffer: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            Int(width),
+            Int(height),
+            kCVPixelFormatType_32BGRA,
+            attributes as CFDictionary,
+            &pixelBuffer
+        )
+
+        guard status == kCVReturnSuccess, let pixelBuffer else {
+            return nil
+        }
+
+        render(
+            metrics: metrics,
+            into: pixelBuffer,
+            configuration: configuration,
+            inputPixelBuffer: inputPixelBuffer
+        )
+        return pixelBuffer
+    }
+
+    func render(
+        metrics: LiveMetrics,
+        into pixelBuffer: CVPixelBuffer,
+        configuration: OverlayConfiguration = .defaultConfiguration,
+        inputPixelBuffer: CVPixelBuffer? = nil
+    ) {
+        let canvasSize = CGSize(
+            width: CVPixelBufferGetWidth(pixelBuffer),
+            height: CVPixelBufferGetHeight(pixelBuffer)
+        )
+        let extent = CGRect(origin: .zero, size: canvasSize)
+        let hud = builder.build(metrics: metrics, configuration: configuration)
+        let background = backgroundImage(in: extent, using: inputPixelBuffer)
+        let compositedImage = overlayImage(for: hud, canvasSize: canvasSize).composited(over: background)
+        let outputImage = configuration.mirrorsOutput
+            ? mirroredImage(from: compositedImage, extent: extent)
+            : compositedImage
+
+        ciContext.render(outputImage, to: pixelBuffer)
+    }
+
+    private func backgroundImage(in extent: CGRect, using inputPixelBuffer: CVPixelBuffer?) -> CIImage {
+        if let inputPixelBuffer {
+            let inputImage = CIImage(cvPixelBuffer: inputPixelBuffer)
+            let scaledImage = aspectFill(inputImage: inputImage, extent: extent)
+            let vignette = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0.12))
+                .cropped(to: extent)
+
+            return vignette.composited(over: scaledImage)
+        }
+
+        let base = CIImage(color: CIColor(red: 0.08, green: 0.11, blue: 0.14, alpha: 1))
+            .cropped(to: extent)
+        let stripe = CIImage(color: CIColor(red: 0.92, green: 0.47, blue: 0.18, alpha: 0.22))
+            .cropped(to: CGRect(x: 0, y: 0, width: extent.width, height: 96))
+            .transformed(by: CGAffineTransform(translationX: 0, y: 72))
+
+        return stripe.composited(over: base)
+    }
+
+    private func overlayImage(for hud: OverlayHUDModel, canvasSize: CGSize) -> CIImage {
+        let renderPanel = {
+            MainActor.assumeIsolated {
+                let panel = OverlayPanelView(model: hud)
+                    .frame(width: 340)
+
+                let renderer = ImageRenderer(content: panel)
+                renderer.scale = 2
+                renderer.proposedSize = .init(width: 340, height: 130)
+
+                guard let cgImage = renderer.cgImage else {
+                    return CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
+                        .cropped(to: CGRect(origin: .zero, size: canvasSize))
+                }
+
+                let image = CIImage(cgImage: cgImage)
+                let origin = Self.origin(
+                    for: hud.placement,
+                    canvasSize: canvasSize,
+                    panelSize: image.extent.size,
+                    inset: 32
+                )
+
+                return image.transformed(
+                    by: CGAffineTransform(translationX: origin.x, y: origin.y)
+                )
+            }
+        }
+
+        if Thread.isMainThread {
+            return renderPanel()
+        }
+
+        return DispatchQueue.main.sync(execute: renderPanel)
+    }
+
+    private static func origin(
+        for placement: OverlayPlacement,
+        canvasSize: CGSize,
+        panelSize: CGSize,
+        inset: Double
+    ) -> CGPoint {
+        let x = switch placement {
+        case .topLeading, .bottomLeading:
+            inset
+        case .topTrailing, .bottomTrailing:
+            canvasSize.width - panelSize.width - inset
+        }
+
+        let y = switch placement {
+        case .topLeading, .topTrailing:
+            canvasSize.height - panelSize.height - inset
+        case .bottomLeading, .bottomTrailing:
+            inset
+        }
+
+        return CGPoint(x: x, y: y)
+    }
+
+    private func aspectFill(inputImage: CIImage, extent: CGRect) -> CIImage {
+        let scale = max(
+            extent.width / inputImage.extent.width,
+            extent.height / inputImage.extent.height
+        )
+        let scaledImage = inputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let xOffset = (extent.width - scaledImage.extent.width) / 2
+        let yOffset = (extent.height - scaledImage.extent.height) / 2
+
+        return scaledImage
+            .transformed(by: CGAffineTransform(translationX: xOffset, y: yOffset))
+            .cropped(to: extent)
+    }
+
+    private func mirroredImage(from image: CIImage, extent: CGRect) -> CIImage {
+        image
+            .transformed(
+                by: CGAffineTransform(scaleX: -1, y: 1)
+                    .translatedBy(x: -extent.width, y: 0)
+            )
+            .cropped(to: extent)
+    }
+}
