@@ -177,8 +177,11 @@ jobs:
 
           if [ -z "$SIGN_UPDATE" ]; then
             echo "sign_update not found in build artifacts, downloading Sparkle tools..."
-            curl -sL "https://github.com/sparkle-project/Sparkle/releases/latest/download/Sparkle-2.7.5.tar.xz" | tar xJ -C /tmp
-            SIGN_UPDATE="/tmp/bin/sign_update"
+            SPARKLE_TAG=$(curl -sI "https://github.com/sparkle-project/Sparkle/releases/latest" | grep -i "^location:" | sed 's/.*tag\///' | tr -d '\r\n')
+            echo "Latest Sparkle: $SPARKLE_TAG"
+            curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_TAG}/Sparkle-${SPARKLE_TAG#v}.tar.xz" -o /tmp/sparkle.tar.xz
+            mkdir -p /tmp/sparkle && tar xJ -C /tmp/sparkle -f /tmp/sparkle.tar.xz
+            SIGN_UPDATE=$(find /tmp/sparkle -name "sign_update" -type f | head -1)
           fi
 
           # Sign the update archive
