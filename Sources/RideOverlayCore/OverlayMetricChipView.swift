@@ -13,37 +13,45 @@ struct OverlayMetricChipView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 30, height: 30)
+                .frame(width: 28, height: 28)
                 .overlay(
                     Image(systemName: item.symbolName)
-                        .font(.system(size: 12, weight: .black))
+                        .font(.system(size: 11, weight: .black))
                         .foregroundStyle(.white)
                 )
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(item.displayValue)
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.68)
 
                 if let unit = item.displayUnit {
                     Text(unit)
-                        .font(.system(.caption, design: .rounded).weight(.bold))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.28))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            item.accentColors[0].opacity(0.28),
+                            Color.black.opacity(0.36),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)

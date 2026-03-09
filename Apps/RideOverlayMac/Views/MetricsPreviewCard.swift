@@ -74,9 +74,9 @@ struct MetricsPreviewCard: View {
     private var overlayWidth: CGFloat {
         switch previewAspect {
         case .square:
-            250
+            270
         case .widescreen:
-            300
+            310
         }
     }
 

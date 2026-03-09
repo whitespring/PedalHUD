@@ -9,10 +9,7 @@ public struct OverlayPanelView: View {
 
     public var body: some View {
         HStack(spacing: 10) {
-            OverlayHeroMetricView(item: heroItem, freshness: model.freshness)
-                .layoutPriority(1)
-
-            ForEach(secondaryItems) { item in
+            ForEach(metricItems) { item in
                 OverlayMetricChipView(item: item)
                     .layoutPriority(1)
             }
@@ -41,11 +38,8 @@ public struct OverlayPanelView: View {
         .accessibilityLabel(model.accessibilityLabel)
     }
 
-    private var heroItem: OverlayHUDModel.Item {
-        model.items.first ?? OverlayHUDModel.Item(kind: .watts, title: "Watts", value: "-- W")
-    }
-
-    private var secondaryItems: [OverlayHUDModel.Item] {
-        Array(model.items.dropFirst())
+    private var metricItems: [OverlayHUDModel.Item] {
+        let items = model.items
+        return items.isEmpty ? [OverlayHUDModel.Item(kind: .watts, title: "Watts", value: "-- W")] : items
     }
 }
