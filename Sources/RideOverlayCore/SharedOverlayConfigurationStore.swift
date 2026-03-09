@@ -16,7 +16,7 @@ public struct SharedOverlayConfigurationStore {
             return .defaultConfiguration
         }
 
-        return configuration
+        return migrated(configuration)
     }
 
     public func save(_ configuration: OverlayConfiguration) {
@@ -25,5 +25,24 @@ public struct SharedOverlayConfigurationStore {
         }
 
         defaults.set(data, forKey: key)
+    }
+
+    private func migrated(_ configuration: OverlayConfiguration) -> OverlayConfiguration {
+        guard configuration.placement == .topTrailing else {
+            return configuration
+        }
+
+        var migratedConfiguration = configuration
+        migratedConfiguration.placement = .bottomCenter
+
+        if migratedConfiguration.cornerInset == 32 {
+            migratedConfiguration.cornerInset = 20
+        }
+
+        if migratedConfiguration.panelOpacity == 0.84 {
+            migratedConfiguration.panelOpacity = 0.9
+        }
+
+        return migratedConfiguration
     }
 }

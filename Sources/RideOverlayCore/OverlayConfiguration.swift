@@ -11,12 +11,12 @@ public struct OverlayConfiguration: Codable, Equatable, Sendable {
     public var staleAfter: TimeInterval
 
     public init(
-        placement: OverlayPlacement = .topTrailing,
+        placement: OverlayPlacement = .bottomCenter,
         showsWatts: Bool = true,
         showsHeartRate: Bool = true,
         mirrorsOutput: Bool = false,
-        cornerInset: Double = 32,
-        panelOpacity: Double = 0.84,
+        cornerInset: Double = 20,
+        panelOpacity: Double = 0.9,
         agingAfter: TimeInterval = 1,
         staleAfter: TimeInterval = 3
     ) {

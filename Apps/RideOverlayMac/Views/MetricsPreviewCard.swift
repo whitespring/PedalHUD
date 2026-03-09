@@ -17,31 +17,9 @@ struct MetricsPreviewCard: View {
             ZStack(alignment: alignment(for: hud.placement)) {
                 previewBackground
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(statusLabel(for: hud.freshness))
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
-                        .foregroundStyle(statusColor(for: hud.freshness))
-
-                    HStack(spacing: 18) {
-                        ForEach(hud.items) { item in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(item.title)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                Text(item.value)
-                                    .font(.title3.weight(.semibold))
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .background(.ultraThinMaterial.opacity(hud.panelOpacity))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .padding(28)
-                .accessibilityLabel(hud.accessibilityLabel)
+                OverlayPanelView(model: hud)
+                    .frame(width: 320)
+                    .padding(panelPadding(for: hud.placement, inset: configuration.cornerInset))
             }
             .scaleEffect(x: configuration.mirrorsOutput ? -1 : 1, y: 1)
         }
@@ -97,30 +75,25 @@ struct MetricsPreviewCard: View {
             .topTrailing
         case .bottomLeading:
             .bottomLeading
+        case .bottomCenter:
+            .bottom
         case .bottomTrailing:
             .bottomTrailing
         }
     }
 
-    private func statusColor(for freshness: MetricFreshness) -> Color {
-        switch freshness {
-        case .live:
-            .green
-        case .aging:
-            .yellow
-        case .stale:
-            .red
-        }
-    }
-
-    private func statusLabel(for freshness: MetricFreshness) -> String {
-        switch freshness {
-        case .live:
-            "Live"
-        case .aging:
-            "Recent"
-        case .stale:
-            "Stale"
+    private func panelPadding(for placement: OverlayPlacement, inset: Double) -> EdgeInsets {
+        switch placement {
+        case .topLeading:
+            EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
+        case .topTrailing:
+            EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
+        case .bottomLeading:
+            EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
+        case .bottomCenter:
+            EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
+        case .bottomTrailing:
+            EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
         }
     }
 }

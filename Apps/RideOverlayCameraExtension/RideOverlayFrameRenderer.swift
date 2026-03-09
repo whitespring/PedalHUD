@@ -58,7 +58,12 @@ final class RideOverlayFrameRenderer: @unchecked Sendable {
         let extent = CGRect(origin: .zero, size: canvasSize)
         let hud = builder.build(metrics: metrics, configuration: configuration)
         let background = backgroundImage(in: extent, using: inputPixelBuffer)
-        let compositedImage = overlayImage(for: hud, canvasSize: canvasSize).composited(over: background)
+        let compositedImage = overlayImage(
+            for: hud,
+            canvasSize: canvasSize,
+            configuration: configuration
+        )
+        .composited(over: background)
         let outputImage = configuration.mirrorsOutput
             ? mirroredImage(from: compositedImage, extent: extent)
             : compositedImage
@@ -85,15 +90,20 @@ final class RideOverlayFrameRenderer: @unchecked Sendable {
         return stripe.composited(over: base)
     }
 
-    private func overlayImage(for hud: OverlayHUDModel, canvasSize: CGSize) -> CIImage {
+    private func overlayImage(
+        for hud: OverlayHUDModel,
+        canvasSize: CGSize,
+        configuration: OverlayConfiguration
+    ) -> CIImage {
         let renderPanel = {
             MainActor.assumeIsolated {
+                let panelWidth = min(max(canvasSize.width * 0.28, 280), 360)
                 let panel = OverlayPanelView(model: hud)
-                    .frame(width: 340)
+                    .frame(width: panelWidth)
 
                 let renderer = ImageRenderer(content: panel)
                 renderer.scale = 2
-                renderer.proposedSize = .init(width: 340, height: 130)
+                renderer.proposedSize = .init(width: panelWidth, height: nil)
 
                 guard let cgImage = renderer.cgImage else {
                     return CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
@@ -105,7 +115,7 @@ final class RideOverlayFrameRenderer: @unchecked Sendable {
                     for: hud.placement,
                     canvasSize: canvasSize,
                     panelSize: image.extent.size,
-                    inset: 32
+                    inset: configuration.cornerInset
                 )
 
                 return image.transformed(
@@ -130,6 +140,8 @@ final class RideOverlayFrameRenderer: @unchecked Sendable {
         let x = switch placement {
         case .topLeading, .bottomLeading:
             inset
+        case .bottomCenter:
+            (canvasSize.width - panelSize.width) / 2
         case .topTrailing, .bottomTrailing:
             canvasSize.width - panelSize.width - inset
         }
@@ -137,7 +149,7 @@ final class RideOverlayFrameRenderer: @unchecked Sendable {
         let y = switch placement {
         case .topLeading, .topTrailing:
             canvasSize.height - panelSize.height - inset
-        case .bottomLeading, .bottomTrailing:
+        case .bottomLeading, .bottomCenter, .bottomTrailing:
             inset
         }
 

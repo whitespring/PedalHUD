@@ -1,0 +1,59 @@
+import SwiftUI
+
+struct OverlayMetricChipView: View {
+    let item: OverlayHUDModel.Item
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: item.accentColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Image(systemName: item.symbolName)
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title.uppercased())
+                    .font(.system(.caption2, design: .rounded).weight(.bold))
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(0.62))
+
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(item.displayValue)
+                        .font(.system(.title3, design: .rounded).weight(.heavy))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    if let unit = item.displayUnit {
+                        Text(unit)
+                            .font(.system(.caption, design: .rounded).weight(.bold))
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.28))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(.white.opacity(0.08))
+        )
+    }
+}
