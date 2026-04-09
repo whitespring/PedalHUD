@@ -38,7 +38,7 @@ struct ConnectionStatusCard: View {
                 discoveredPeripherals: model.discoveredANTDevices,
                 connectedName: model.connectedANTDeviceName,
                 isScanning: model.isScanningANT,
-                isBluetoothAvailable: model.isANTAvailable,
+                isBluetoothAvailable: true,  // ANT+ uses USB, not Bluetooth
                 onScan: { model.startANTScan() },
                 onDisconnect: { model.disconnectANT() },
                 onConnect: { id in model.connectANT(id: id) }
