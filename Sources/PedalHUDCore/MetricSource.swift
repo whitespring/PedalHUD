@@ -4,6 +4,7 @@ public enum MetricSource: String, Codable, CaseIterable, Sendable {
     case directBluetooth
     case phoneRelay
     case watchRelay
+    case antUSB
     case simulator
 }
 

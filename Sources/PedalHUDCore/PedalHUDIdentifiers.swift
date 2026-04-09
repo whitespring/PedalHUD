@@ -6,6 +6,6 @@ public enum PedalHUDIdentifiers {
            !value.isEmpty {
             return value
         }
-        return "group.cz.dctr.pedalhud"
+        return "group.com.whitespring.pedalhud"
     }()
 }

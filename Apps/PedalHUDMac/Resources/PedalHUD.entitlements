@@ -8,7 +8,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.cz.dctr.pedalhud</string>
+		<string>group.com.whitespring.pedalhud</string>
 	</array>
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>

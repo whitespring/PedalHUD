@@ -20,7 +20,7 @@ struct ConnectionStatusCard: View {
 
             PeripheralRow(
                 icon: "heart.fill",
-                title: "Heart Rate",
+                title: "Heart Rate (BLE)",
                 statusText: model.heartRateConnectionState,
                 discoveredPeripherals: model.discoveredHeartRateMonitors,
                 connectedName: model.connectedHeartRateMonitorName,
@@ -29,6 +29,19 @@ struct ConnectionStatusCard: View {
                 onScan: { model.startHeartRateScan() },
                 onDisconnect: { model.disconnectHeartRateMonitor() },
                 onConnect: { id in model.connectHeartRateMonitor(id: id) }
+            )
+
+            PeripheralRow(
+                icon: "antenna.radiowaves.left.and.right",
+                title: "Heart Rate (ANT+)",
+                statusText: model.antConnectionState,
+                discoveredPeripherals: model.discoveredANTDevices,
+                connectedName: model.connectedANTDeviceName,
+                isScanning: model.isScanningANT,
+                isBluetoothAvailable: model.isANTAvailable,
+                onScan: { model.startANTScan() },
+                onDisconnect: { model.disconnectANT() },
+                onConnect: { id in model.connectANT(id: id) }
             )
         }
         .background(Color(nsColor: .controlBackgroundColor))

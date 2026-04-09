@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		292390A7BB996D1609E4A5DD /* PedalHUDCore in Frameworks */ = {isa = PBXBuildFile; productRef = E443DE892F5DADBF00E9209A /* PedalHUDCore */; };
-		38A11EEAB23CBB8CFFB9371E /* com.wahoocamera.cameraextension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FBE185AF90119D0BE49822C /* com.wahoocamera.cameraextension.systemextension */; };
+		38A11EEAB23CBB8CFFB9371E /* com.whitespring.pedalhud.cameraextension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 3FBE185AF90119D0BE49822C /* com.whitespring.pedalhud.cameraextension.systemextension */; };
 		428BD374B585D1B000FC5D7E /* PedalHUDFrameRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0936361D031AC507B3B431C /* PedalHUDFrameRenderer.swift */; };
 		5F497C02141311FE13B3AD34 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30FC2260C3E216B13B5C79BD /* Cocoa.framework */; };
 		7291A2BA7CF29A3F4A2EC181 /* PedalHUDCameraDeviceSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCEAAC82209253EA6BAA36F6 /* PedalHUDCameraDeviceSource.swift */; };
@@ -39,7 +39,7 @@
 			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
 			dstSubfolderSpec = 16;
 			files = (
-				38A11EEAB23CBB8CFFB9371E /* com.wahoocamera.cameraextension.systemextension in Embed System Extensions */,
+				38A11EEAB23CBB8CFFB9371E /* com.whitespring.pedalhud.cameraextension.systemextension in Embed System Extensions */,
 			);
 			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -49,7 +49,7 @@
 /* Begin PBXFileReference section */
 		2465539AA06D220CEB410F4C /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		30FC2260C3E216B13B5C79BD /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		3FBE185AF90119D0BE49822C /* com.wahoocamera.cameraextension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.wahoocamera.cameraextension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		3FBE185AF90119D0BE49822C /* com.whitespring.pedalhud.cameraextension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = com.whitespring.pedalhud.cameraextension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		4D1F57AE840895682D1AC2D1 /* TempBundle.bundle */ = {isa = PBXFileReference; explicitFileType = "wrapper.plug-in"; includeInIndex = 0; path = TempBundle.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F0B955DFCAC58B24A45DF69 /* PedalHUDCameraProviderSource.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PedalHUDCameraProviderSource.swift; sourceTree = "<group>"; };
 		91D66503EE41562AFE4090E1 /* OverlayPanelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OverlayPanelView.swift; sourceTree = "<group>"; };
@@ -140,7 +140,7 @@
 			children = (
 				E443DE7A2F5DAD7000E9209A /* PedalHUD.app */,
 				4D1F57AE840895682D1AC2D1 /* TempBundle.bundle */,
-				3FBE185AF90119D0BE49822C /* com.wahoocamera.cameraextension.systemextension */,
+				3FBE185AF90119D0BE49822C /* com.whitespring.pedalhud.cameraextension.systemextension */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -174,7 +174,7 @@
 				E443DE892F5DADBF00E9209A /* PedalHUDCore */,
 			);
 			productName = PedalHUDCameraExtension;
-			productReference = 3FBE185AF90119D0BE49822C /* com.wahoocamera.cameraextension.systemextension */;
+			productReference = 3FBE185AF90119D0BE49822C /* com.whitespring.pedalhud.cameraextension.systemextension */;
 			productType = "com.apple.product-type.system-extension";
 		};
 		E443DE792F5DAD7000E9209A /* PedalHUD */ = {
@@ -494,6 +494,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "../Apps/PedalHUDMac/Resources/PedalHUD-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -527,6 +528,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "../Apps/PedalHUDMac/Resources/PedalHUD-Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

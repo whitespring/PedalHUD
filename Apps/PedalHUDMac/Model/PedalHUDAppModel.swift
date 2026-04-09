@@ -20,15 +20,21 @@ final class PedalHUDAppModel {
 
     var discoveredTrainers: [DiscoveredPeripheral] = []
     var discoveredHeartRateMonitors: [DiscoveredPeripheral] = []
+    var discoveredANTDevices: [DiscoveredPeripheral] = []
     var connectedTrainerName: String?
     var connectedHeartRateMonitorName: String?
+    var connectedANTDeviceName: String?
+    var antConnectionState = "Not connected"
     var isScanningTrainers = false
     var isScanningHeartRate = false
+    var isScanningANT = false
     var isBluetoothAvailable = false
+    var isANTAvailable = false
 
     @ObservationIgnored private let metricsWriter: SharedMetricsWriter
     @ObservationIgnored private let trainerClient: TrainerBluetoothClient
     @ObservationIgnored private let heartRateClient: HeartRateBluetoothClient
+    @ObservationIgnored private let antClient: ANTUSBHeartRateClient
     @ObservationIgnored private let overlayConfigurationStore: SharedOverlayConfigurationStore
     @ObservationIgnored private let cameraSelectionStore: SharedCameraSelectionStore
     @ObservationIgnored private let cameraPreviewController: CameraPreviewController
@@ -38,6 +44,7 @@ final class PedalHUDAppModel {
         metricsWriter: SharedMetricsWriter = SharedMetricsWriter(),
         trainerClient: TrainerBluetoothClient = TrainerBluetoothClient(),
         heartRateClient: HeartRateBluetoothClient = HeartRateBluetoothClient(),
+        antClient: ANTUSBHeartRateClient = ANTUSBHeartRateClient(),
         overlayConfigurationStore: SharedOverlayConfigurationStore = SharedOverlayConfigurationStore(),
         cameraSelectionStore: SharedCameraSelectionStore = SharedCameraSelectionStore(),
         cameraPreviewController: CameraPreviewController = CameraPreviewController()
@@ -45,6 +52,7 @@ final class PedalHUDAppModel {
         self.metricsWriter = metricsWriter
         self.trainerClient = trainerClient
         self.heartRateClient = heartRateClient
+        self.antClient = antClient
         self.overlayConfigurationStore = overlayConfigurationStore
         self.cameraSelectionStore = cameraSelectionStore
         self.cameraPreviewController = cameraPreviewController
@@ -83,7 +91,7 @@ final class PedalHUDAppModel {
         }
 
         self.heartRateClient.onHeartRate = { [weak self] heartRate in
-            self?.handleHeartRate(heartRate)
+            self?.handleHeartRate(heartRate, source: .directBluetooth)
         }
 
         self.heartRateClient.onPeripheralsChanged = { [weak self] peripherals in
@@ -105,6 +113,36 @@ final class PedalHUDAppModel {
 
         self.heartRateClient.onBluetoothStateChanged = { [weak self] available in
             self?.isBluetoothAvailable = available
+        }
+
+        // ANT+ USB callbacks
+        self.antClient.onStateChange = { [weak self] state in
+            self?.antConnectionState = state
+        }
+
+        self.antClient.onHeartRate = { [weak self] heartRate in
+            self?.handleHeartRate(heartRate, source: .antUSB)
+        }
+
+        self.antClient.onPeripheralsChanged = { [weak self] peripherals in
+            self?.discoveredANTDevices = peripherals
+        }
+
+        self.antClient.onConnected = { [weak self] name in
+            self?.connectedANTDeviceName = name
+            self?.isScanningANT = false
+        }
+
+        self.antClient.onDisconnected = { [weak self] in
+            self?.connectedANTDeviceName = nil
+            self?.isScanningANT = false
+            self?.discoveredANTDevices = []
+            self?.isANTAvailable = false
+            self?.clearHeartRateMetrics()
+        }
+
+        self.antClient.onUSBAvailableChanged = { [weak self] available in
+            self?.isANTAvailable = available
         }
 
         self.cameraPreviewController.onStateChange = { [weak self] state, isRunning in
@@ -130,6 +168,9 @@ final class PedalHUDAppModel {
         }
 
         trainerClient.initializeBluetooth()
+
+        // Auto-start ANT+ USB monitoring
+        startANTScan()
     }
 
     // MARK: - Trainer scanning
@@ -167,6 +208,25 @@ final class PedalHUDAppModel {
         connectedHeartRateMonitorName = nil
         discoveredHeartRateMonitors = []
         heartRateClient.stop()
+        clearHeartRateMetrics()
+    }
+
+    // MARK: - ANT+ USB scanning
+
+    func startANTScan() {
+        isScanningANT = true
+        antClient.start()
+    }
+
+    func connectANT(id: UUID) {
+        antClient.connectPeripheral(id: id)
+    }
+
+    func disconnectANT() {
+        isScanningANT = false
+        connectedANTDeviceName = nil
+        discoveredANTDevices = []
+        antClient.stop()
         clearHeartRateMetrics()
     }
 
@@ -273,12 +333,12 @@ final class PedalHUDAppModel {
         }
     }
 
-    private func handleHeartRate(_ heartRate: Int) {
+    private func handleHeartRate(_ heartRate: Int, source: MetricSource = .directBluetooth) {
         let mergedMetrics = LiveMetrics(
             watts: currentMetrics.watts,
             heartRate: heartRate,
             cadence: currentMetrics.cadence,
-            source: .directBluetooth,
+            source: source,
             receivedAt: .now
         )
         currentMetrics = mergedMetrics
