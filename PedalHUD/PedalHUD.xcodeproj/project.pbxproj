@@ -20,6 +20,7 @@
 		EC79BB7F93BF6A8534568CE0 /* PedalHUDMetricsReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB39D852FAD2252029E6CEE2 /* PedalHUDMetricsReader.swift */; };
 		F72A218DBF546E434C7BA0FE /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2465539AA06D220CEB410F4C /* main.swift */; };
 		SPARKLE_BUILD_FILE_01 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = SPARKLE_PROD_DEP_001 /* Sparkle */; };
+		AABB00110022 /* ANTUSBDevice.m in Sources */ = {isa = PBXBuildFile; fileRef = AABB00110011 /* ANTUSBDevice.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,8 @@
 		F7919DA9AFC24132A26FF0FC /* PedalHUDCameraStreamSource.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PedalHUDCameraStreamSource.swift; sourceTree = "<group>"; };
 		FB39D852FAD2252029E6CEE2 /* PedalHUDMetricsReader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PedalHUDMetricsReader.swift; sourceTree = "<group>"; };
 		XCCONFIG_SHARED_REF /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		AABB00110011 /* ANTUSBDevice.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = ANTUSBDevice.m; path = ../Apps/PedalHUDMac/Services/ANTPlus/ANTUSBDevice.m; sourceTree = "<group>"; };
+		AABB00110033 /* ANTUSBDevice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = ANTUSBDevice.h; path = ../Apps/PedalHUDMac/Services/ANTPlus/ANTUSBDevice.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -267,6 +270,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AABB00110022 /* ANTUSBDevice.m in Sources */,
 				F72A218DBF546E434C7BA0FE /* main.swift in Sources */,
 				C4DCCF63179BC6F6AA5E07B1 /* PedalHUDCameraProviderSource.swift in Sources */,
 				BB7B600DAA3BE1945DC5E6F0 /* PedalHUDCameraCaptureSource.swift in Sources */,

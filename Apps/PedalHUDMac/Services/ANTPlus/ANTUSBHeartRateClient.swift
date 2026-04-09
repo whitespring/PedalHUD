@@ -169,7 +169,7 @@ final class ANTUSBHeartRateClient: NSObject {
 
             // Send reset
             if let resetMsg = sequence.first {
-                device.write(resetMsg as Data)
+                device.write(resetMsg)
             }
 
             // Wait for reset, then send config
@@ -177,7 +177,7 @@ final class ANTUSBHeartRateClient: NSObject {
                 guard let device = self.usbDevice, device.isOpen else { return }
 
                 for msg in sequence.dropFirst() {
-                    device.write(msg as Data)
+                    device.write(msg)
                     Thread.sleep(forTimeInterval: 0.1)
                 }
 
