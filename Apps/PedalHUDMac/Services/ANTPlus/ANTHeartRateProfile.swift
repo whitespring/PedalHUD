@@ -1,72 +1,67 @@
 import Foundation
 
 /// ANT+ Heart Rate Monitor device profile
-/// Matches the ant-plus npm library's channel configuration exactly
+/// Sequence matches ant-plus npm library exactly:
+/// https://github.com/Loghorn/ant-plus/blob/master/src/ant.ts
 enum ANTHeartRateProfile {
     static let deviceType: UInt8 = 0x78     // 120 = Heart Rate Monitor
-    static let rfFrequency: UInt8 = 57      // 2457 MHz (ANT+ frequency)
-    static let channelPeriod: UInt16 = 8070 // ~4.06 Hz message rate
+    static let rfFrequency: UInt8 = 57      // 2457 MHz
+    static let channelPeriod: UInt16 = 8070 // ~4.06 Hz
     static let channel: UInt8 = 0
     static let networkNumber: UInt8 = 0
-    static let searchTimeout: UInt8 = 255   // Never stop searching (like ant-plus library)
+    static let searchTimeout: UInt8 = 255
 
-    /// Generate the full initialization sequence to start receiving HR data.
-    /// Matches the ant-plus npm library's attach() sequence exactly:
+    /// ANT+ managed network key
+    static let networkKey: [UInt8] = [0xB9, 0xA5, 0x21, 0xFB, 0xBD, 0x72, 0xC3, 0x45]
+
+    /// Init sequence matching ant-plus library's attach() exactly:
     ///   1. Reset
-    ///   2. Assign channel (receive/slave)
-    ///   3. Set channel ID (wildcard or specific device)
-    ///   4. Set channel period
-    ///   5. Set RF frequency
-    ///   6. Set search timeout (255 = infinite)
-    ///   7. Set low priority search timeout (0 = disable)
-    ///   8. Open channel
+    ///   2. Set Network Key (0x46)
+    ///   3. Assign Channel (0x42) — receive mode
+    ///   4. Set Channel ID (0x51) — wildcard or specific
+    ///   5. Set Search Timeout (0x44) — 255 = infinite
+    ///   6. Set RF Frequency (0x45) — 57 = 2457MHz
+    ///   7. Set Channel Period (0x43) — 8070
+    ///   8. Lib Config (0x6E) — enable extended messages
+    ///   9. Open Channel (0x4B)
     static func initSequence(deviceNumber: UInt16 = 0) -> [Data] {
         let devLo = UInt8(deviceNumber & 0xFF)
         let devHi = UInt8(deviceNumber >> 8)
 
         return [
-            // 1. Reset system
+            // 1. Reset
             ANTMessage.build(messageID: ANTMessage.systemReset, data: [0x00]),
 
-            // 2. Assign channel (channel 0, type 0x00 = slave/receive, network 0)
+            // 2. Set Network Key
+            ANTMessage.build(messageID: ANTMessage.setNetworkKey, data: [networkNumber] + networkKey),
+
+            // 3. Assign Channel (0x42, type=0x00=receive, network=0)
             ANTMessage.build(messageID: ANTMessage.assignChannel, data: [channel, 0x00, networkNumber]),
 
-            // 3. Set channel ID (device number, device type 0x78, transmission type 0x00)
+            // 4. Set Channel ID
             ANTMessage.build(messageID: ANTMessage.setChannelID, data: [channel, devLo, devHi, deviceType, 0x00]),
 
-            // 4. Set channel period (8070 = ~4.06 Hz, little-endian)
-            ANTMessage.build(messageID: ANTMessage.setChannelPeriod, data: [
-                channel,
-                UInt8(channelPeriod & 0xFF),
-                UInt8(channelPeriod >> 8)
-            ]),
-
-            // 5. Set RF frequency (57 = 2457 MHz)
-            ANTMessage.build(messageID: ANTMessage.setChannelRFFreq, data: [channel, rfFrequency]),
-
-            // 6. Set search timeout to 255 (infinite — keeps searching until found)
+            // 5. Set Search Timeout (0x44, value=255)
             ANTMessage.build(messageID: ANTMessage.setSearchTimeout, data: [channel, searchTimeout]),
 
-            // 7. Set low priority search timeout to 0 (disable)
-            ANTMessage.build(messageID: ANTMessage.setLowPrioritySearchTimeout, data: [channel, 0x00]),
+            // 6. Set RF Frequency (0x45, value=57)
+            ANTMessage.build(messageID: ANTMessage.setChannelRFFreq, data: [channel, rfFrequency]),
 
-            // 8. Open channel
+            // 7. Set Channel Period (0x43, 8070 LE)
+            ANTMessage.build(messageID: ANTMessage.setChannelPeriod, data: [
+                channel, UInt8(channelPeriod & 0xFF), UInt8(channelPeriod >> 8)
+            ]),
+
+            // 8. Lib Config — enable extended messages (0xE0)
+            ANTMessage.build(messageID: ANTMessage.libConfig, data: [0x00, 0xE0]),
+
+            // 9. Open Channel
             ANTMessage.build(messageID: ANTMessage.openChannel, data: [channel]),
         ]
     }
 
-    /// Extract heart rate from a broadcast data payload
-    /// Broadcast message (0x4E) payload structure (9 bytes with channel):
-    ///   Byte 0: Channel number
-    ///   Bytes 1-8: Data page (8 bytes)
-    ///     Byte 1: Data page number / toggle
-    ///     Bytes 2-4: Page-specific data
-    ///     Bytes 5-6: Heart beat event time (little-endian, 1/1024 sec)
-    ///     Byte 7: Heart beat count
-    ///     Byte 8: Computed heart rate (BPM)
+    /// Extract heart rate from broadcast payload (includes channel byte)
     static func parseHeartRate(from payload: Data) -> Int? {
-        // Payload includes channel byte at start
-        // HR is at the LAST byte of the 9-byte payload (index 8)
         guard payload.count >= 9 else { return nil }
         let hr = Int(payload[payload.startIndex + 8])
         return hr > 0 ? hr : nil

@@ -1,19 +1,24 @@
 import Foundation
 
 /// ANT+ message constants and framing
+/// Message IDs from: https://github.com/Loghorn/ant-plus/blob/master/src/ant.ts
 enum ANTMessage {
     static let sync: UInt8 = 0xA4
 
-    // Message IDs
+    // Config messages
     static let systemReset: UInt8 = 0x4A
-    static let assignChannel: UInt8 = 0x46
-    static let setChannelID: UInt8 = 0x51
-    static let setChannelRFFreq: UInt8 = 0x43
-    static let setChannelPeriod: UInt8 = 0x44
-    static let setSearchTimeout: UInt8 = 0x44  // also used for period but different context
+    static let setNetworkKey: UInt8 = 0x46       // MESSAGE_NETWORK_KEY
+    static let assignChannel: UInt8 = 0x42       // MESSAGE_CHANNEL_ASSIGN
+    static let setChannelID: UInt8 = 0x51        // MESSAGE_CHANNEL_ID
+    static let setChannelPeriod: UInt8 = 0x43    // MESSAGE_CHANNEL_PERIOD
+    static let setSearchTimeout: UInt8 = 0x44    // MESSAGE_CHANNEL_SEARCH_TIMEOUT
+    static let setChannelRFFreq: UInt8 = 0x45    // MESSAGE_CHANNEL_FREQUENCY
     static let setLowPrioritySearchTimeout: UInt8 = 0x63
-    static let openChannel: UInt8 = 0x4B
+    static let libConfig: UInt8 = 0x6E           // MESSAGE_LIB_CONFIG
+    static let openChannel: UInt8 = 0x4B         // MESSAGE_CHANNEL_OPEN
     static let closeChannel: UInt8 = 0x4C
+
+    // Data messages
     static let broadcastData: UInt8 = 0x4E
     static let channelResponse: UInt8 = 0x40
     static let requestMessage: UInt8 = 0x4D
@@ -28,17 +33,15 @@ enum ANTMessage {
         return Data(msg)
     }
 
-    /// Parse an ANT+ message from a data buffer. Returns (messageID, payload, bytesConsumed) or nil.
+    /// Parse an ANT+ message from a data buffer.
     static func parse(from data: Data) -> (messageID: UInt8, payload: Data, bytesConsumed: Int)? {
         guard data.count >= 4 else { return nil }
-
-        // Find sync byte
         guard let syncIndex = data.firstIndex(of: sync) else { return nil }
         let remaining = data[syncIndex...]
         guard remaining.count >= 4 else { return nil }
 
         let length = Int(remaining[remaining.startIndex + 1])
-        let totalLength = length + 4 // sync + length + msgID + data + checksum
+        let totalLength = length + 4
 
         guard remaining.count >= totalLength else { return nil }
 
@@ -46,7 +49,6 @@ enum ANTMessage {
         let payloadStart = remaining.startIndex + 3
         let payload = remaining[payloadStart..<payloadStart + length]
 
-        // Verify checksum
         let messageBytes = remaining[remaining.startIndex..<remaining.startIndex + totalLength - 1]
         let computed = messageBytes.reduce(0, ^)
         let expected = remaining[remaining.startIndex + totalLength - 1]
