@@ -270,21 +270,17 @@ final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
         let hr = Int(hrByte)
 
         if hr > 0 {
-            // If we're in scan mode (no specific device selected), request channel ID
-            if selectedDeviceNumber == nil && !sensorFound {
-                // Request Channel ID to learn who is sending
-                if let device = usbDevice, device.isOpen {
-                    let reqMsg = ANTMessage.build(messageID: ANTMessage.requestMessage, data: [channel, ANTMessage.channelIDResponse])
-                    usbQueue.async { device.write(reqMsg) }
+            if !sensorFound {
+                sensorFound = true
+                logger.info("ANT+ HR sensor found! HR=\(hr)")
+                DispatchQueue.main.async {
+                    self.onConnected?("ANT+ HR Sensor")
+                    self.onStateChange?("Receiving heart rate")
                 }
             }
 
             DispatchQueue.main.async {
                 self.onHeartRate?(hr)
-            }
-
-            if !sensorFound && selectedDeviceNumber != nil {
-                sensorFound = true
             }
         }
     }
