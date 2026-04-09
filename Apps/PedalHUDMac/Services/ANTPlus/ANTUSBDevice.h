@@ -16,9 +16,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// Write data to the USB bulk OUT endpoint
 - (BOOL)writeData:(NSData *)data;
 
-/// Read data from the USB bulk IN endpoint with timeout
-/// Returns nil on error, empty data on timeout
-- (nullable NSData *)readDataWithMaxLength:(NSUInteger)maxLength timeout:(UInt32)timeoutMs;
+/// Blocking read from USB bulk IN endpoint. Returns actual bytes read.
+/// Returns nil on error. Call abortRead to unblock from another thread.
+- (nullable NSData *)readDataWithMaxLength:(NSUInteger)maxLength;
+
+/// Abort a blocking read (call from another thread to stop the read loop)
+- (void)abortRead;
 
 @end
 

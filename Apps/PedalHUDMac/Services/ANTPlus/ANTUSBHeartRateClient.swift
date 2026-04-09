@@ -49,6 +49,7 @@ final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
 
     func stop() {
         isReading = false
+        usbDevice?.abortRead()  // unblock the blocking ReadPipe
         selectedDeviceNumber = nil
         sensorFound = false
         discoveredSensors.removeAll()
@@ -226,7 +227,9 @@ final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
         readQueue.async { [weak self] in
             guard let self else { return }
             while self.isReading {
-                guard let data = device.readData(withMaxLength: 64, timeout: 1000) else {
+                // Blocking read — returns when data arrives or abortRead is called
+                guard let data = device.readData(withMaxLength: 64) else {
+                    // nil = error or abort
                     if self.isReading {
                         self.isReading = false
                         DispatchQueue.main.async {
@@ -237,20 +240,6 @@ final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
                     break
                 }
                 if data.count > 0 {
-                    let hex = data.prefix(20).map { String(format: "%02X", $0) }.joined(separator: " ")
-                    let hasSync = data.contains(0xA4)
-                    let allZero = data.allSatisfy { $0 == 0 }
-                    if !allZero {
-                        let logPath = NSHomeDirectory() + "/ant-debug.log"
-                        let line = "\(Date()) Read \(data.count)b sync=\(hasSync): \(hex)\n"
-                        if let fh = FileHandle(forWritingAtPath: logPath) {
-                            fh.seekToEndOfFile()
-                            fh.write(line.data(using: .utf8)!)
-                            fh.closeFile()
-                        } else {
-                            FileManager.default.createFile(atPath: logPath, contents: line.data(using: .utf8))
-                        }
-                    }
                     self.processReceivedData(data)
                 }
             }
