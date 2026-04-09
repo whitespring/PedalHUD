@@ -14,6 +14,8 @@ enum ANTMessage {
     static let closeChannel: UInt8 = 0x4C
     static let broadcastData: UInt8 = 0x4E
     static let channelResponse: UInt8 = 0x40
+    static let requestMessage: UInt8 = 0x4D
+    static let channelIDResponse: UInt8 = 0x51
     static let startupMessage: UInt8 = 0x6F
 
     /// Build a complete ANT+ message with sync byte, length, ID, data, and checksum

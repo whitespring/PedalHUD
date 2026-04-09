@@ -5,9 +5,13 @@ import os.log
 
 private let logger = Logger(subsystem: "com.pedalhud", category: "ANTPlus")
 
-/// ANT+ USB heart rate client — same callback interface as HeartRateBluetoothClient
-@MainActor
-final class ANTUSBHeartRateClient: NSObject {
+// ANTUSBDevice is thread-safe (all methods are self-contained with internal locking)
+extension ANTUSBDevice: @unchecked @retroactive Sendable {}
+
+/// ANT+ USB heart rate client with device scanning and selection.
+/// Phase 1 (Scan): Opens wildcard channel, collects all HR device IDs in range.
+/// Phase 2 (Connect): User selects a device, channel re-opens targeting that specific device.
+final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
     var onHeartRate: ((Int) -> Void)?
     var onStateChange: ((String) -> Void)?
     var onPeripheralsChanged: (([DiscoveredPeripheral]) -> Void)?
@@ -20,6 +24,7 @@ final class ANTUSBHeartRateClient: NSObject {
     private var matchIterator: io_iterator_t = 0
     private var readBuffer = Data()
     private var isReading = false
+    private var sensorFound = false
 
     private let usbQueue = DispatchQueue(label: "com.pedalhud.ant.usb", qos: .userInitiated)
     private let readQueue = DispatchQueue(label: "com.pedalhud.ant.read", qos: .userInitiated)
@@ -27,37 +32,54 @@ final class ANTUSBHeartRateClient: NSObject {
     private static let vendorID: Int = 0x0FCF
     private static let productIDs: [Int] = [0x1004, 0x1006, 0x1007, 0x1008, 0x1009]
 
-    private var discoveredSticks: [DiscoveredPeripheral] = []
-    private var connectedStickName: String?
-    private var sensorFound = false
+    /// Discovered ANT+ HR sensors: key = deviceNumber (UInt16), value = DiscoveredPeripheral
+    private var discoveredSensors: [UInt16: DiscoveredPeripheral] = [:]
+
+    /// The device number the user selected (nil = scanning/wildcard mode)
+    private var selectedDeviceNumber: UInt16?
 
     // MARK: - Public Interface
 
     func start() {
-        updateState("Searching for ANT+ USB sticks")
+        DispatchQueue.main.async {
+            self.onStateChange?("Searching for ANT+ USB sticks")
+        }
         startUSBMonitoring()
     }
 
     func stop() {
         isReading = false
+        selectedDeviceNumber = nil
+        sensorFound = false
+        discoveredSensors.removeAll()
         usbDevice?.close()
         usbDevice = nil
-        connectedStickName = nil
-        sensorFound = false
         stopUSBMonitoring()
-        discoveredSticks = []
-        onPeripheralsChanged?([])
-        updateState("Not connected")
-        onDisconnected?()
+        DispatchQueue.main.async {
+            self.onPeripheralsChanged?([])
+            self.onStateChange?("Not connected")
+            self.onDisconnected?()
+            self.onUSBAvailableChanged?(false)
+        }
     }
 
+    /// User selected a sensor from the discovered list — reconnect targeting that specific device
     func connectPeripheral(id: UUID) {
-        // ANT+ auto-connects — just initialize HR scanning
-        guard let device = usbDevice, device.isOpen else {
-            updateState("ANT+ stick not available")
-            return
+        // Find the device number from our discovered list
+        guard let entry = discoveredSensors.first(where: { $0.value.id == id }) else { return }
+        let deviceNumber = entry.key
+        let name = entry.value.name
+
+        logger.info("User selected ANT+ sensor: \(name) (device #\(deviceNumber))")
+        selectedDeviceNumber = deviceNumber
+        sensorFound = false
+
+        DispatchQueue.main.async {
+            self.onStateChange?("Connecting to \(name)")
         }
-        initializeHeartRate()
+
+        // Close current channel and re-open targeting this specific device
+        reconnectToDevice(deviceNumber: deviceNumber, name: name)
     }
 
     // MARK: - USB Monitoring
@@ -75,35 +97,25 @@ final class ANTUSBHeartRateClient: NSObject {
             }
             matchingDict[kUSBVendorID] = Self.vendorID
             matchingDict[kUSBProductID] = productID
-
             let matchCopy = matchingDict.mutableCopy() as! NSMutableDictionary
 
             IOServiceAddMatchingNotification(
-                port,
-                kIOFirstMatchNotification,
-                matchCopy as CFDictionary,
+                port, kIOFirstMatchNotification, matchCopy as CFDictionary,
                 { refcon, iterator in
                     guard let refcon else { return }
-                    let client = Unmanaged<ANTUSBHeartRateClient>.fromOpaque(refcon).takeUnretainedValue()
-                    client.handleDeviceArrival(iterator: iterator)
+                    Unmanaged<ANTUSBHeartRateClient>.fromOpaque(refcon).takeUnretainedValue()
+                        .handleDeviceArrival(iterator: iterator)
                 },
                 Unmanaged.passUnretained(self).toOpaque(),
                 &matchIterator
             )
-
             handleDeviceArrival(iterator: matchIterator)
         }
     }
 
     private func stopUSBMonitoring() {
-        if matchIterator != 0 {
-            IOObjectRelease(matchIterator)
-            matchIterator = 0
-        }
-        if let port = notificationPort {
-            IONotificationPortDestroy(port)
-            notificationPort = nil
-        }
+        if matchIterator != 0 { IOObjectRelease(matchIterator); matchIterator = 0 }
+        if let port = notificationPort { IONotificationPortDestroy(port); notificationPort = nil }
     }
 
     private func handleDeviceArrival(iterator: io_iterator_t) {
@@ -111,43 +123,23 @@ final class ANTUSBHeartRateClient: NSObject {
         repeat {
             service = IOIteratorNext(iterator)
             guard service != 0 else { break }
-
-            // Skip if already open
-            if let existing = usbDevice, existing.isOpen {
-                IOObjectRelease(service)
-                continue
-            }
+            if let existing = usbDevice, existing.isOpen { IOObjectRelease(service); continue }
 
             let name = getPropertyValue(service: service, key: "USB Product Name") as? String ?? "ANT+ USB Stick"
-            let locationID = getPropertyValue(service: service, key: "locationID") as? UInt64 ?? UInt64(service)
-
-            logger.info("ANT+ device found: \(name)")
+            logger.info("ANT+ stick found: \(name)")
 
             let device = ANTUSBDevice()
-            let opened = device.open(withService: service)
-
-            if opened {
+            if device.open(withService: service) {
                 self.usbDevice = device
-                let stickID = UUID(uuidString: String(format: "%08X-0000-0000-0000-%012X", UInt32(locationID >> 32), UInt64(locationID & 0xFFFFFFFFFFFF)))
-                    ?? UUID()
-
-                let peripheral = DiscoveredPeripheral(id: stickID, name: name, rssi: -30)
-                discoveredSticks = [peripheral]
-
                 DispatchQueue.main.async {
-                    self.onPeripheralsChanged?(self.discoveredSticks)
                     self.onUSBAvailableChanged?(true)
-                    self.updateState("ANT+ stick found: \(name)")
+                    self.onStateChange?("ANT+ stick connected — scanning for sensors")
                 }
-
-                // Auto-start HR scanning
-                initializeHeartRate()
+                // Start wildcard scan
+                beginScan()
             } else {
-                DispatchQueue.main.async {
-                    self.updateState("Failed to open ANT+ stick")
-                }
+                DispatchQueue.main.async { self.onStateChange?("Failed to open ANT+ stick") }
             }
-
             IOObjectRelease(service)
         } while true
     }
@@ -156,64 +148,95 @@ final class ANTUSBHeartRateClient: NSObject {
         IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
     }
 
-    // MARK: - ANT+ HR Initialization
+    // MARK: - ANT+ Scan (wildcard — discover all HR sensors)
 
-    private func initializeHeartRate() {
+    private func beginScan() {
         guard let device = usbDevice, device.isOpen else { return }
+        selectedDeviceNumber = nil
+        sensorFound = false
+        discoveredSensors.removeAll()
 
-        // Start read loop first
         startReading()
 
-        usbQueue.async {
-            let sequence = ANTHeartRateProfile.initSequence()
+        usbQueue.async { [weak self, device] in
+            guard let self else { return }
+            self.sendInitSequence(device: device, deviceNumber: 0x0000) // wildcard
+        }
+    }
 
-            // Send reset
-            if let resetMsg = sequence.first {
-                device.write(resetMsg)
+    // MARK: - ANT+ Connect (specific device)
+
+    private func reconnectToDevice(deviceNumber: UInt16, name: String) {
+        guard let device = usbDevice, device.isOpen else { return }
+
+        usbQueue.async { [weak self, device] in
+            guard let self else { return }
+
+            // Close current channel
+            let closeMsg = ANTMessage.build(messageID: ANTMessage.closeChannel, data: [ANTHeartRateProfile.channel])
+            device.write(closeMsg)
+            Thread.sleep(forTimeInterval: 0.3)
+
+            // Re-init with specific device number
+            self.sendInitSequence(device: device, deviceNumber: deviceNumber)
+
+            DispatchQueue.main.async {
+                self.onConnected?(name)
+                self.onStateChange?("Receiving from \(name)")
             }
+        }
+    }
 
-            // Wait for reset, then send config
-            self.usbQueue.asyncAfter(deadline: .now() + 1.0) {
-                guard let device = self.usbDevice, device.isOpen else { return }
+    private func sendInitSequence(device: ANTUSBDevice, deviceNumber: UInt16) {
+        let ch = ANTHeartRateProfile.channel
+        let devLo = UInt8(deviceNumber & 0xFF)
+        let devHi = UInt8(deviceNumber >> 8)
 
-                for msg in sequence.dropFirst() {
-                    device.write(msg)
-                    Thread.sleep(forTimeInterval: 0.1)
-                }
+        let sequence: [Data] = [
+            ANTMessage.build(messageID: ANTMessage.systemReset, data: [0x00]),
+        ]
 
-                DispatchQueue.main.async {
-                    self.connectedStickName = self.discoveredSticks.first?.name
-                    self.onConnected?(self.connectedStickName ?? "ANT+ Stick")
-                    self.updateState("Searching for HR sensor")
-                }
+        // Send reset
+        if let reset = sequence.first { device.write(reset) }
+
+        usbQueue.asyncAfter(deadline: .now() + 1.0) {
+            let config: [Data] = [
+                ANTMessage.build(messageID: ANTMessage.assignChannel, data: [ch, 0x00, ANTHeartRateProfile.networkNumber]),
+                ANTMessage.build(messageID: ANTMessage.setChannelID, data: [ch, devLo, devHi, ANTHeartRateProfile.deviceType, 0x00]),
+                ANTMessage.build(messageID: ANTMessage.setChannelRFFreq, data: [ch, ANTHeartRateProfile.rfFrequency]),
+                ANTMessage.build(messageID: ANTMessage.setChannelPeriod, data: [
+                    ch, UInt8(ANTHeartRateProfile.channelPeriod & 0xFF), UInt8(ANTHeartRateProfile.channelPeriod >> 8)
+                ]),
+                ANTMessage.build(messageID: ANTMessage.openChannel, data: [ch]),
+            ]
+            for msg in config {
+                device.write(msg)
+                Thread.sleep(forTimeInterval: 0.1)
             }
+            logger.info("ANT+ channel opened (device=\(deviceNumber))")
         }
     }
 
     // MARK: - Reading
 
     private func startReading() {
-        guard let device = usbDevice, device.isOpen else { return }
+        guard let device = usbDevice, device.isOpen, !isReading else { return }
         isReading = true
 
         readQueue.async { [weak self] in
             guard let self else { return }
-
             while self.isReading {
                 guard let data = device.readData(withMaxLength: 64, timeout: 1000) else {
                     if self.isReading {
                         self.isReading = false
                         DispatchQueue.main.async {
-                            self.updateState("ANT+ stick disconnected")
+                            self.onStateChange?("ANT+ stick disconnected")
                             self.onDisconnected?()
                         }
                     }
                     break
                 }
-
-                if data.count > 0 {
-                    self.processReceivedData(data)
-                }
+                if data.count > 0 { self.processReceivedData(data) }
             }
         }
     }
@@ -228,23 +251,13 @@ final class ANTUSBHeartRateClient: NSObject {
 
             switch parsed.messageID {
             case ANTMessage.broadcastData:
-                if let hr = ANTHeartRateProfile.parseHeartRate(from: parsed.payload) {
-                    if !sensorFound {
-                        sensorFound = true
-                        DispatchQueue.main.async {
-                            self.updateState("Receiving heart rate")
-                        }
-                    }
-                    DispatchQueue.main.async {
-                        self.onHeartRate?(hr)
-                    }
-                }
+                handleBroadcast(parsed.payload)
 
             case ANTMessage.channelResponse:
                 handleChannelResponse(parsed.payload)
 
             case ANTMessage.startupMessage:
-                logger.info("ANT+ stick startup received")
+                logger.info("ANT+ startup received")
 
             default:
                 break
@@ -252,19 +265,69 @@ final class ANTUSBHeartRateClient: NSObject {
         }
     }
 
-    private func handleChannelResponse(_ payload: Data) {
-        guard payload.count >= 3 else { return }
-        let code = payload[payload.startIndex + 2]
+    private func handleBroadcast(_ payload: Data) {
+        guard payload.count >= 9 else { return }
 
-        // Search timeout
-        if code == 1 {
+        // In wildcard mode, the ANT+ stick auto-tracks whichever device it finds.
+        // We extract the HR and also request the Channel ID to get the sender's device number.
+        let channel = payload[payload.startIndex]
+
+        // Parse HR from broadcast (byte 8 = computed HR, offset by channel byte)
+        let hrByte = payload[payload.startIndex + 8]
+        let hr = Int(hrByte)
+
+        if hr > 0 {
+            // If we're in scan mode (no specific device selected), request channel ID
+            if selectedDeviceNumber == nil && !sensorFound {
+                // Request Channel ID to learn who is sending
+                if let device = usbDevice, device.isOpen {
+                    let reqMsg = ANTMessage.build(messageID: ANTMessage.requestMessage, data: [channel, ANTMessage.channelIDResponse])
+                    usbQueue.async { device.write(reqMsg) }
+                }
+            }
+
             DispatchQueue.main.async {
-                self.updateState("No HR sensor found — is the chest strap active?")
+                self.onHeartRate?(hr)
+            }
+
+            if !sensorFound && selectedDeviceNumber != nil {
+                sensorFound = true
             }
         }
     }
 
-    private func updateState(_ state: String) {
-        onStateChange?(state)
+    private func handleChannelResponse(_ payload: Data) {
+        guard payload.count >= 3 else { return }
+        let msgID = payload[payload.startIndex + 1]
+        let code = payload[payload.startIndex + 2]
+
+        // Check if this is a Channel ID response (response to our request)
+        if msgID == ANTMessage.channelIDResponse && payload.count >= 5 {
+            let devLo = payload[payload.startIndex + 1]
+            let devHi = payload[payload.startIndex + 2]
+            let deviceNumber = UInt16(devLo) | (UInt16(devHi) << 8)
+
+            if deviceNumber != 0 && discoveredSensors[deviceNumber] == nil {
+                let sensorID = UUID()
+                let name = "HR Sensor #\(deviceNumber)"
+                let peripheral = DiscoveredPeripheral(id: sensorID, name: name, rssi: -40)
+                discoveredSensors[deviceNumber] = peripheral
+
+                logger.info("Discovered ANT+ sensor: \(name)")
+
+                let list = Array(discoveredSensors.values).sorted { $0.name < $1.name }
+                DispatchQueue.main.async {
+                    self.onPeripheralsChanged?(list)
+                    self.onStateChange?("Found \(self.discoveredSensors.count) HR sensor\(self.discoveredSensors.count == 1 ? "" : "s")")
+                }
+            }
+        }
+
+        // Search timeout
+        if code == 1 {
+            DispatchQueue.main.async {
+                self.onStateChange?("No HR sensor found — is chest strap active?")
+            }
+        }
     }
 }

@@ -74,7 +74,8 @@ private struct PeripheralRow: View {
 
                 Text(title)
                     .font(.subheadline.weight(.medium))
-                    .frame(width: 80, alignment: .leading)
+                    .frame(minWidth: 80, alignment: .leading)
+                    .fixedSize()
 
                 if let connectedName {
                     HStack(spacing: 4) {
