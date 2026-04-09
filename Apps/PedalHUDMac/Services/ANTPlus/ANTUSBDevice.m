@@ -223,10 +223,10 @@ static os_log_t antLog(void) {
 - (nullable NSData *)readDataWithMaxLength:(NSUInteger)maxLength timeout:(UInt32)timeoutMs {
     if (!_interfaceInterface || _readPipeRef == 0) return nil;
 
-    UInt8 *buffer = malloc(maxLength);
+    UInt8 *buffer = calloc(maxLength, 1);  // zero-initialized
     if (!buffer) return nil;
 
-    UInt32 bytesRead = (UInt32)maxLength;
+    UInt32 bytesRead = (UInt32)maxLength;  // ReadPipeTO expects max buffer size here
 
     // Use ReadPipeTO with timeout to avoid blocking forever
     os_log(antLog(), "ReadPipeTO called, timeout=%dms", timeoutMs);
@@ -239,7 +239,7 @@ static os_log_t antLog(void) {
         timeoutMs   // completionTimeout
     );
 
-    os_log_debug(antLog(), "ReadPipeTO kr=%d bytesRead=%d", kr, bytesRead);
+    os_log(antLog(), "ReadPipeTO result: kr=%d (0x%x) bytesRead=%d", kr, kr, bytesRead);
 
     // Return data if we got any, regardless of error code
     // (kIOUSBTransactionTimeout often returns with valid data)
