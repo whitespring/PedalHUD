@@ -10,6 +10,8 @@ enum ANTMessage {
     static let setChannelID: UInt8 = 0x51
     static let setChannelRFFreq: UInt8 = 0x43
     static let setChannelPeriod: UInt8 = 0x44
+    static let setSearchTimeout: UInt8 = 0x44  // also used for period but different context
+    static let setLowPrioritySearchTimeout: UInt8 = 0x63
     static let openChannel: UInt8 = 0x4B
     static let closeChannel: UInt8 = 0x4C
     static let broadcastData: UInt8 = 0x4E

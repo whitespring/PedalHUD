@@ -189,32 +189,20 @@ final class ANTUSBHeartRateClient: NSObject, @unchecked Sendable {
     }
 
     private func sendInitSequence(device: ANTUSBDevice, deviceNumber: UInt16) {
-        let ch = ANTHeartRateProfile.channel
-        let devLo = UInt8(deviceNumber & 0xFF)
-        let devHi = UInt8(deviceNumber >> 8)
+        // Use the exact same sequence as the ant-plus npm library
+        let sequence = ANTHeartRateProfile.initSequence(deviceNumber: deviceNumber)
 
-        let sequence: [Data] = [
-            ANTMessage.build(messageID: ANTMessage.systemReset, data: [0x00]),
-        ]
+        // Send reset (first message)
+        device.write(sequence[0])
 
-        // Send reset
-        if let reset = sequence.first { device.write(reset) }
-
+        // Wait 1s for stick to reset, then send remaining config
         usbQueue.asyncAfter(deadline: .now() + 1.0) {
-            let config: [Data] = [
-                ANTMessage.build(messageID: ANTMessage.assignChannel, data: [ch, 0x00, ANTHeartRateProfile.networkNumber]),
-                ANTMessage.build(messageID: ANTMessage.setChannelID, data: [ch, devLo, devHi, ANTHeartRateProfile.deviceType, 0x00]),
-                ANTMessage.build(messageID: ANTMessage.setChannelRFFreq, data: [ch, ANTHeartRateProfile.rfFrequency]),
-                ANTMessage.build(messageID: ANTMessage.setChannelPeriod, data: [
-                    ch, UInt8(ANTHeartRateProfile.channelPeriod & 0xFF), UInt8(ANTHeartRateProfile.channelPeriod >> 8)
-                ]),
-                ANTMessage.build(messageID: ANTMessage.openChannel, data: [ch]),
-            ]
-            for msg in config {
+            for msg in sequence.dropFirst() {
                 device.write(msg)
+                // Wait for each response before sending next
                 Thread.sleep(forTimeInterval: 0.1)
             }
-            logger.info("ANT+ channel opened (device=\(deviceNumber))")
+            logger.info("ANT+ channel opened (device=\(deviceNumber), \(sequence.count) messages)")
         }
     }
 
